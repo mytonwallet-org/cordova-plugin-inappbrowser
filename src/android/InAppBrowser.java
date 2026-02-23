@@ -1117,7 +1117,10 @@ public class InAppBrowser extends CordovaPlugin {
 
                     @Override
                     public void onPermissionRequest(final PermissionRequest request) {
-                        handlePermissionRequest(request);
+                        // Security fix: delegate to InAppChromeClient for origin isolation.
+                        // handlePermissionRequest() only checked OS-level permission and
+                        // auto-granted to all origins — bypassing per-origin isolation.
+                        super.onPermissionRequest(request);
                     }
                 });
                 currentClient = new InAppBrowserClient(thatWebView, titleTextView, beforeload);
