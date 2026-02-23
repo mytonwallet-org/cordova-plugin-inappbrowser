@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_permission_prompt">อนุญาตให้ %1$s ใช้%2$sของคุณหรือไม่?</string>
+    <string name="web_permission_allow">อนุญาต</string>
+    <string name="web_permission_deny">ไม่อนุญาต</string>
+    <string name="web_permission_camera">กล้อง</string>
+    <string name="web_permission_microphone">ไมโครโฟน</string>
+    <string name="web_permission_location">ตำแหน่งที่ตั้ง</string>
+    <string name="web_permission_device_features">ความสามารถของอุปกรณ์</string>
+    <string name="web_permission_this_site">เว็บไซต์นี้</string>
+</resources>

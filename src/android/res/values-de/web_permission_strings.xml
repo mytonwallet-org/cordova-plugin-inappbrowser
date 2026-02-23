@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_permission_prompt">Möchten Sie %1$s erlauben, auf %2$s zuzugreifen?</string>
+    <string name="web_permission_allow">Erlauben</string>
+    <string name="web_permission_deny">Nicht erlauben</string>
+    <string name="web_permission_camera">Kamera</string>
+    <string name="web_permission_microphone">Mikrofon</string>
+    <string name="web_permission_location">Standort</string>
+    <string name="web_permission_device_features">Gerätefunktionen</string>
+    <string name="web_permission_this_site">diese Website</string>
+</resources>

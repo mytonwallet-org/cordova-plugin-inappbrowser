@@ -634,6 +634,12 @@ public class InAppBrowser extends CordovaPlugin {
                 // NB: From SDK 19: "If you call methods on WebView from any thread
                 // other than your app's UI thread, it can cause unexpected results."
                 // http://developer.android.com/guide/webapps/migrating.html#Threads
+                // Security fix: clear per-origin permission state on close
+                WebChromeClient chromeClient = childView.getWebChromeClient();
+                if (chromeClient instanceof InAppChromeClient) {
+                    ((InAppChromeClient) chromeClient).clearPermissionState();
+                }
+
                 childView.loadUrl("about:blank");
 
                 try {

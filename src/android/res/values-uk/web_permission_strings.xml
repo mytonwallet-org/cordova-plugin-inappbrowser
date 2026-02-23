@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_permission_prompt">Дозволити %1$s доступ до %2$s?</string>
+    <string name="web_permission_allow">Дозволити</string>
+    <string name="web_permission_deny">Не дозволяти</string>
+    <string name="web_permission_camera">камери</string>
+    <string name="web_permission_microphone">мікрофона</string>
+    <string name="web_permission_location">геолокації</string>
+    <string name="web_permission_device_features">функцій пристрою</string>
+    <string name="web_permission_this_site">цьому сайту</string>
+</resources>

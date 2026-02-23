@@ -25,8 +25,12 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import android.annotation.TargetApi;
+import android.app.Activity;
+import android.content.Context;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Message;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JsPromptResult;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -36,32 +40,107 @@ import android.webkit.WebViewClient;
 import android.webkit.GeolocationPermissions.Callback;
 import android.webkit.PermissionRequest;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
 public class InAppChromeClient extends WebChromeClient {
 
     private CordovaWebView webView;
     private String LOG_TAG = "InAppChromeClient";
     private long MAX_QUOTA = 100 * 1024 * 1024;
 
+    // Security fix: track granted permissions per origin
+    private final Map<String, Set<String>> grantedPermissionsByOrigin = new HashMap<>();
+
+    private static final String ORIGIN_PERMISSION_CAMERA = "camera";
+    private static final String ORIGIN_PERMISSION_MICROPHONE = "microphone";
+    private static final String ORIGIN_PERMISSION_GEOLOCATION = "geolocation";
+
     public InAppChromeClient(CordovaWebView webView) {
         super();
         this.webView = webView;
     }
-    
+
+    /**
+     * Clear all tracked per-origin permissions. Call when the InAppBrowser is closed.
+     */
+    public void clearPermissionState() {
+        grantedPermissionsByOrigin.clear();
+    }
+
+    @Override
     public void onPermissionRequest(final PermissionRequest request) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            request.grant(request.getResources());
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return;
         }
+
+        String origin = normalizeOrigin(request.getOrigin());
+        Set<String> requestedOriginPermissions = getRequestedMediaOriginPermissions(request.getResources());
+        Set<String> missingOriginPermissions = getMissingOriginPermissions(origin, requestedOriginPermissions);
+
+        if (missingOriginPermissions.isEmpty()) {
+            safeGrant(request, request.getResources());
+            return;
+        }
+
+        showOriginPermissionDialog(
+            origin,
+            missingOriginPermissions,
+            new Runnable() {
+                @Override
+                public void run() {
+                    grantOriginPermissions(origin, requestedOriginPermissions);
+                    safeGrant(request, request.getResources());
+                }
+            },
+            new Runnable() {
+                @Override
+                public void run() {
+                    safeDeny(request);
+                }
+            }
+        );
+    }
+
+    @Override
+    public void onGeolocationPermissionsShowPrompt(String origin, Callback callback) {
+        super.onGeolocationPermissionsShowPrompt(origin, callback);
+
+        String normalizedOrigin = normalizeOrigin(origin);
+        if (hasOriginPermission(normalizedOrigin, ORIGIN_PERMISSION_GEOLOCATION)) {
+            callback.invoke(origin, true, false);
+            return;
+        }
+
+        Set<String> geoPermission = new HashSet<>();
+        geoPermission.add(ORIGIN_PERMISSION_GEOLOCATION);
+
+        showOriginPermissionDialog(
+            normalizedOrigin,
+            geoPermission,
+            new Runnable() {
+                @Override
+                public void run() {
+                    grantOriginPermissions(normalizedOrigin, geoPermission);
+                    callback.invoke(origin, true, false);
+                }
+            },
+            new Runnable() {
+                @Override
+                public void run() {
+                    callback.invoke(origin, false, false);
+                }
+            }
+        );
     }
 
     /**
      * Handle database quota exceeded notification.
-     *
-     * @param url
-     * @param databaseIdentifier
-     * @param currentQuota
-     * @param estimatedSize
-     * @param totalUsedQuota
-     * @param quotaUpdater
      */
     @Override
     public void onExceededDatabaseQuota(String url, String databaseIdentifier, long currentQuota, long estimatedSize,
@@ -71,47 +150,8 @@ public class InAppChromeClient extends WebChromeClient {
         quotaUpdater.updateQuota(MAX_QUOTA);
     }
 
-    /**
-     * Instructs the client to show a prompt to ask the user to set the Geolocation permission state for the specified origin.
-     *
-     * @param origin
-     * @param callback
-     */
-    @Override
-    public void onGeolocationPermissionsShowPrompt(String origin, Callback callback) {
-        super.onGeolocationPermissionsShowPrompt(origin, callback);
-        callback.invoke(origin, true, false);
-    }
-
-    /**
-     * Tell the client to display a prompt dialog to the user.
-     * If the client returns true, WebView will assume that the client will
-     * handle the prompt dialog and call the appropriate JsPromptResult method.
-     *
-     * The prompt bridge provided for the InAppBrowser is capable of executing any
-     * oustanding callback belonging to the InAppBrowser plugin. Care has been
-     * taken that other callbacks cannot be triggered, and that no other code
-     * execution is possible.
-     *
-     * To trigger the bridge, the prompt default value should be of the form:
-     *
-     * gap-iab://<callbackId>
-     *
-     * where <callbackId> is the string id of the callback to trigger (something
-     * like "InAppBrowser0123456789")
-     *
-     * If present, the prompt message is expected to be a JSON-encoded value to
-     * pass to the callback. A JSON_EXCEPTION is returned if the JSON is invalid.
-     *
-     * @param view
-     * @param url
-     * @param message
-     * @param defaultValue
-     * @param result
-     */
     @Override
     public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
-        // See if the prompt string uses the 'gap-iab' protocol. If so, the remainder should be the id of a callback to execute.
         if (defaultValue != null && defaultValue.startsWith("gap")) {
             if(defaultValue.startsWith("gap-iab://")) {
                 PluginResult scriptResult;
@@ -129,17 +169,13 @@ public class InAppChromeClient extends WebChromeClient {
                     this.webView.sendPluginResult(scriptResult, scriptCallbackId);
                     result.confirm("");
                     return true;
-                }
-                else {
-                    // Anything else that doesn't look like InAppBrowser0123456789 should end up here
-                    LOG.w(LOG_TAG, "InAppBrowser callback called with invalid callbackId : "+ scriptCallbackId);
+                } else {
+                    LOG.w(LOG_TAG, "InAppBrowser callback called with invalid callbackId : " + scriptCallbackId);
                     result.cancel();
                     return true;
                 }
-            }
-            else {
-                // Anything else with a gap: prefix should get this message
-                LOG.w(LOG_TAG, "InAppBrowser does not support Cordova API calls: " + url + " " + defaultValue); 
+            } else {
+                LOG.w(LOG_TAG, "InAppBrowser does not support Cordova API calls: " + url + " " + defaultValue);
                 result.cancel();
                 return true;
             }
@@ -147,19 +183,6 @@ public class InAppChromeClient extends WebChromeClient {
         return false;
     }
 
-    /**
-     * The InAppWebBrowser WebView is configured to MultipleWindow mode to mitigate a security
-     * bug found in Chromium prior to version 83.0.4103.106.
-     * See https://bugs.chromium.org/p/chromium/issues/detail?id=1083819
-     *
-     * Valid Urls set to open in new window will be routed back to load in the original WebView.
-     *
-     * @param view
-     * @param isDialog
-     * @param isUserGesture
-     * @param resultMsg
-     * @return
-     */
     @Override
     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
         WebView inAppWebView = view;
@@ -186,5 +209,170 @@ public class InAppChromeClient extends WebChromeClient {
         resultMsg.sendToTarget();
 
         return true;
+    }
+
+    // ---- Permission helpers ----
+
+    private Set<String> getRequestedMediaOriginPermissions(String[] resources) {
+        Set<String> permissions = new HashSet<>();
+        for (String resource : resources) {
+            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+                permissions.add(ORIGIN_PERMISSION_CAMERA);
+            } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                permissions.add(ORIGIN_PERMISSION_MICROPHONE);
+            }
+        }
+        return permissions;
+    }
+
+    private Set<String> getMissingOriginPermissions(String origin, Set<String> requested) {
+        Set<String> missing = new HashSet<>();
+        for (String perm : requested) {
+            if (!hasOriginPermission(origin, perm)) {
+                missing.add(perm);
+            }
+        }
+        return missing;
+    }
+
+    private boolean hasOriginPermission(String origin, String permissionKey) {
+        Set<String> perms = grantedPermissionsByOrigin.get(origin);
+        return perms != null && perms.contains(permissionKey);
+    }
+
+    private void grantOriginPermissions(String origin, Set<String> permissionKeys) {
+        if (permissionKeys.isEmpty()) return;
+        Set<String> perms = grantedPermissionsByOrigin.get(origin);
+        if (perms == null) {
+            perms = new HashSet<>();
+            grantedPermissionsByOrigin.put(origin, perms);
+        }
+        perms.addAll(permissionKeys);
+    }
+
+    private void showOriginPermissionDialog(
+        final String origin,
+        final Set<String> requestedPermissions,
+        final Runnable onAllow,
+        final Runnable onDeny
+    ) {
+        Context ctx = webView.getView().getContext();
+        Activity activity = (ctx instanceof Activity) ? (Activity) ctx : null;
+        if (activity == null || activity.isFinishing()) {
+            onDeny.run();
+            return;
+        }
+
+        String originName = getOriginDisplayName(origin, ctx);
+        String permissionList = buildPermissionLabel(requestedPermissions, ctx);
+        String message = getString(ctx, "web_permission_prompt", originName, permissionList);
+        String allowLabel = getString(ctx, "web_permission_allow");
+        String denyLabel = getString(ctx, "web_permission_deny");
+
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (activity.isFinishing()) {
+                    onDeny.run();
+                    return;
+                }
+                new androidx.appcompat.app.AlertDialog.Builder(activity)
+                    .setMessage(message)
+                    .setCancelable(false)
+                    .setPositiveButton(allowLabel, (dialog, which) -> onAllow.run())
+                    .setNegativeButton(denyLabel, (dialog, which) -> onDeny.run())
+                    .show();
+            }
+        });
+    }
+
+    private String buildPermissionLabel(Set<String> requestedPermissions, Context ctx) {
+        List<String> labels = new ArrayList<>();
+        if (requestedPermissions.contains(ORIGIN_PERMISSION_CAMERA)) {
+            labels.add(getString(ctx, "web_permission_camera"));
+        }
+        if (requestedPermissions.contains(ORIGIN_PERMISSION_MICROPHONE)) {
+            labels.add(getString(ctx, "web_permission_microphone"));
+        }
+        if (requestedPermissions.contains(ORIGIN_PERMISSION_GEOLOCATION)) {
+            labels.add(getString(ctx, "web_permission_location"));
+        }
+        if (labels.isEmpty()) {
+            return getString(ctx, "web_permission_device_features");
+        }
+        if (labels.size() == 1) {
+            return labels.get(0);
+        }
+        // "camera and microphone" or "camera, microphone and location"
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < labels.size(); i++) {
+            if (i > 0) {
+                sb.append(i == labels.size() - 1 ? " and " : ", ");
+            }
+            sb.append(labels.get(i));
+        }
+        return sb.toString();
+    }
+
+    private String getOriginDisplayName(String origin, Context ctx) {
+        if (origin == null || origin.isEmpty()) {
+            return getString(ctx, "web_permission_this_site");
+        }
+        try {
+            String host = Uri.parse(origin).getHost();
+            return (host != null && !host.isEmpty()) ? host : origin;
+        } catch (Exception e) {
+            return origin;
+        }
+    }
+
+    private String normalizeOrigin(Uri uri) {
+        if (uri == null) return "";
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (scheme == null || host == null) return uri.toString();
+        StringBuilder sb = new StringBuilder();
+        sb.append(scheme.toLowerCase(Locale.US)).append("://").append(host.toLowerCase(Locale.US));
+        if (uri.getPort() != -1) sb.append(":").append(uri.getPort());
+        return sb.toString();
+    }
+
+    private String normalizeOrigin(String origin) {
+        if (origin == null) return "";
+        try {
+            return normalizeOrigin(Uri.parse(origin));
+        } catch (Exception e) {
+            return origin;
+        }
+    }
+
+    private void safeGrant(PermissionRequest request, String[] resources) {
+        try {
+            request.grant(resources);
+        } catch (IllegalStateException e) {
+            LOG.w(LOG_TAG, "Permission request already processed: " + e.getMessage());
+        }
+    }
+
+    private void safeDeny(PermissionRequest request) {
+        try {
+            request.deny();
+        } catch (IllegalStateException e) {
+            LOG.w(LOG_TAG, "Permission request already processed: " + e.getMessage());
+        }
+    }
+
+    // ---- String resource helpers ----
+
+    private String getString(Context ctx, String name) {
+        int id = ctx.getResources().getIdentifier(name, "string", ctx.getPackageName());
+        if (id == 0) return name; // fallback to key if not found
+        return ctx.getString(id);
+    }
+
+    private String getString(Context ctx, String name, Object... formatArgs) {
+        int id = ctx.getResources().getIdentifier(name, "string", ctx.getPackageName());
+        if (id == 0) return name;
+        return ctx.getString(id, formatArgs);
     }
 }

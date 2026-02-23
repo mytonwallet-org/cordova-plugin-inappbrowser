@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_permission_prompt">%1$s sitesinin %2$s kullanmasına izin verilsin mi?</string>
+    <string name="web_permission_allow">İzin ver</string>
+    <string name="web_permission_deny">İzin verme</string>
+    <string name="web_permission_camera">kamera</string>
+    <string name="web_permission_microphone">mikrofon</string>
+    <string name="web_permission_location">konum</string>
+    <string name="web_permission_device_features">cihaz özellikleri</string>
+    <string name="web_permission_this_site">bu site</string>
+</resources>
