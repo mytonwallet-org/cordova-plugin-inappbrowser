@@ -67,7 +67,8 @@ public class InAppChromeClient extends WebChromeClient {
     }
 
     /**
-     * Clear all tracked per-origin permissions. Call when the InAppBrowser is closed.
+     * Clear all tracked per-origin permissions. Call when the InAppBrowser is
+     * closed.
      */
     public void clearPermissionState() {
         grantedPermissionsByOrigin.clear();
@@ -89,22 +90,21 @@ public class InAppChromeClient extends WebChromeClient {
         }
 
         showOriginPermissionDialog(
-            origin,
-            missingOriginPermissions,
-            new Runnable() {
-                @Override
-                public void run() {
-                    grantOriginPermissions(origin, requestedOriginPermissions);
-                    safeGrant(request, request.getResources());
-                }
-            },
-            new Runnable() {
-                @Override
-                public void run() {
-                    safeDeny(request);
-                }
-            }
-        );
+                origin,
+                missingOriginPermissions,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        grantOriginPermissions(origin, requestedOriginPermissions);
+                        safeGrant(request, request.getResources());
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        safeDeny(request);
+                    }
+                });
     }
 
     @Override
@@ -121,48 +121,93 @@ public class InAppChromeClient extends WebChromeClient {
         geoPermission.add(ORIGIN_PERMISSION_GEOLOCATION);
 
         showOriginPermissionDialog(
-            normalizedOrigin,
-            geoPermission,
-            new Runnable() {
-                @Override
-                public void run() {
-                    grantOriginPermissions(normalizedOrigin, geoPermission);
-                    callback.invoke(origin, true, false);
-                }
-            },
-            new Runnable() {
-                @Override
-                public void run() {
-                    callback.invoke(origin, false, false);
-                }
-            }
-        );
+                normalizedOrigin,
+                geoPermission,
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        grantOriginPermissions(normalizedOrigin, geoPermission);
+                        callback.invoke(origin, true, false);
+                    }
+                },
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        callback.invoke(origin, false, false);
+                    }
+                });
     }
 
     /**
      * Handle database quota exceeded notification.
+     * 
+     * @param url
+     * @param databaseIdentifier
+     * @param currentQuota
+     * @param estimatedSize
+     * @param totalUsedQuota
+     * @param quotaUpdater
      */
     @Override
     public void onExceededDatabaseQuota(String url, String databaseIdentifier, long currentQuota, long estimatedSize,
-            long totalUsedQuota, WebStorage.QuotaUpdater quotaUpdater)
-    {
-        LOG.d(LOG_TAG, "onExceededDatabaseQuota estimatedSize: %d  currentQuota: %d  totalUsedQuota: %d", estimatedSize, currentQuota, totalUsedQuota);
+            long totalUsedQuota, WebStorage.QuotaUpdater quotaUpdater) {
+        LOG.d(LOG_TAG, "onExceededDatabaseQuota estimatedSize: %d  currentQuota: %d  totalUsedQuota: %d", estimatedSize,
+                currentQuota, totalUsedQuota);
         quotaUpdater.updateQuota(MAX_QUOTA);
     }
 
+    /**
+     * Instructs the client to show a prompt to ask the user to set the Geolocation
+     * permission state for the specified origin.
+     *
+     * @param origin
+     * @param callback
+     */
+    @Override
+    public void onGeolocationPermissionsShowPrompt(String origin, Callback callback) {
+        super.onGeolocationPermissionsShowPrompt(origin, callback);
+        callback.invoke(origin, true, false);
+    }
+
+    /**
+     * Tell the client to display a prompt dialog to the user.
+     * If the client returns true, WebView will assume that the client will
+     * handle the prompt dialog and call the appropriate JsPromptResult method.
+     *
+     * The prompt bridge provided for the InAppBrowser is capable of executing any
+     * oustanding callback belonging to the InAppBrowser plugin. Care has been
+     * taken that other callbacks cannot be triggered, and that no other code
+     * execution is possible.
+     *
+     * To trigger the bridge, the prompt default value should be of the form:
+     *
+     * gap-iab://<callbackId>
+     *
+     * where <callbackId> is the string id of the callback to trigger (something
+     * like "InAppBrowser0123456789")
+     *
+     * If present, the prompt message is expected to be a JSON-encoded value to
+     * pass to the callback. A JSON_EXCEPTION is returned if the JSON is invalid.
+     *
+     * @param view
+     * @param url
+     * @param message
+     * @param defaultValue
+     * @param result
+     */
     @Override
     public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
         if (defaultValue != null && defaultValue.startsWith("gap")) {
-            if(defaultValue.startsWith("gap-iab://")) {
+            if (defaultValue.startsWith("gap-iab://")) {
                 PluginResult scriptResult;
                 String scriptCallbackId = defaultValue.substring(10);
                 if (scriptCallbackId.matches("^InAppBrowser[0-9]{1,10}$")) {
-                    if(message == null || message.length() == 0) {
+                    if (message == null || message.length() == 0) {
                         scriptResult = new PluginResult(PluginResult.Status.OK, new JSONArray());
                     } else {
                         try {
                             scriptResult = new PluginResult(PluginResult.Status.OK, new JSONArray(message));
-                        } catch(JSONException e) {
+                        } catch (JSONException e) {
                             scriptResult = new PluginResult(PluginResult.Status.JSON_EXCEPTION, e.getMessage());
                         }
                     }
@@ -186,20 +231,19 @@ public class InAppChromeClient extends WebChromeClient {
     @Override
     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
         WebView inAppWebView = view;
-        final WebViewClient webViewClient =
-                new WebViewClient() {
-                    @Override
-                    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                        inAppWebView.loadUrl(request.getUrl().toString());
-                        return true;
-                    }
+        final WebViewClient webViewClient = new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                inAppWebView.loadUrl(request.getUrl().toString());
+                return true;
+            }
 
-                    @Override
-                    public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                        inAppWebView.loadUrl(url);
-                        return true;
-                    }
-                };
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                inAppWebView.loadUrl(url);
+                return true;
+            }
+        };
 
         final WebView newWebView = new WebView(view.getContext());
         newWebView.setWebViewClient(webViewClient);
@@ -241,7 +285,8 @@ public class InAppChromeClient extends WebChromeClient {
     }
 
     private void grantOriginPermissions(String origin, Set<String> permissionKeys) {
-        if (permissionKeys.isEmpty()) return;
+        if (permissionKeys.isEmpty())
+            return;
         Set<String> perms = grantedPermissionsByOrigin.get(origin);
         if (perms == null) {
             perms = new HashSet<>();
@@ -251,11 +296,10 @@ public class InAppChromeClient extends WebChromeClient {
     }
 
     private void showOriginPermissionDialog(
-        final String origin,
-        final Set<String> requestedPermissions,
-        final Runnable onAllow,
-        final Runnable onDeny
-    ) {
+            final String origin,
+            final Set<String> requestedPermissions,
+            final Runnable onAllow,
+            final Runnable onDeny) {
         Context ctx = webView.getView().getContext();
         Activity activity = (ctx instanceof Activity) ? (Activity) ctx : null;
         if (activity == null || activity.isFinishing()) {
@@ -277,11 +321,11 @@ public class InAppChromeClient extends WebChromeClient {
                     return;
                 }
                 new androidx.appcompat.app.AlertDialog.Builder(activity)
-                    .setMessage(message)
-                    .setCancelable(false)
-                    .setPositiveButton(allowLabel, (dialog, which) -> onAllow.run())
-                    .setNegativeButton(denyLabel, (dialog, which) -> onDeny.run())
-                    .show();
+                        .setMessage(message)
+                        .setCancelable(false)
+                        .setPositiveButton(allowLabel, (dialog, which) -> onAllow.run())
+                        .setNegativeButton(denyLabel, (dialog, which) -> onDeny.run())
+                        .show();
             }
         });
     }
@@ -327,18 +371,22 @@ public class InAppChromeClient extends WebChromeClient {
     }
 
     private String normalizeOrigin(Uri uri) {
-        if (uri == null) return "";
+        if (uri == null)
+            return "";
         String scheme = uri.getScheme();
         String host = uri.getHost();
-        if (scheme == null || host == null) return uri.toString();
+        if (scheme == null || host == null)
+            return uri.toString();
         StringBuilder sb = new StringBuilder();
         sb.append(scheme.toLowerCase(Locale.US)).append("://").append(host.toLowerCase(Locale.US));
-        if (uri.getPort() != -1) sb.append(":").append(uri.getPort());
+        if (uri.getPort() != -1)
+            sb.append(":").append(uri.getPort());
         return sb.toString();
     }
 
     private String normalizeOrigin(String origin) {
-        if (origin == null) return "";
+        if (origin == null)
+            return "";
         try {
             return normalizeOrigin(Uri.parse(origin));
         } catch (Exception e) {
@@ -366,13 +414,15 @@ public class InAppChromeClient extends WebChromeClient {
 
     private String getString(Context ctx, String name) {
         int id = ctx.getResources().getIdentifier(name, "string", ctx.getPackageName());
-        if (id == 0) return name; // fallback to key if not found
+        if (id == 0)
+            return name; // fallback to key if not found
         return ctx.getString(id);
     }
 
     private String getString(Context ctx, String name, Object... formatArgs) {
         int id = ctx.getResources().getIdentifier(name, "string", ctx.getPackageName());
-        if (id == 0) return name;
+        if (id == 0)
+            return name;
         return ctx.getString(id, formatArgs);
     }
 }
