@@ -55,6 +55,17 @@
         <resource-file src="src/android/res/drawable/ic_action_more.xml" target="res/drawable/ic_action_more.xml" />
         <resource-file src="src/android/res/drawable/ic_action_previous_item.xml" target="res/drawable/ic_action_previous_item.xml" />
         <resource-file src="src/android/res/drawable/ic_arrow_bottom_8.xml" target="res/drawable/ic_arrow_bottom_8.xml" />
+        <!-- Permission dialog strings (all locales) -->
+        <resource-file src="src/android/res/values/web_permission_strings.xml" target="res/values/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-ru/web_permission_strings.xml" target="res/values-ru/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-de/web_permission_strings.xml" target="res/values-de/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-es/web_permission_strings.xml" target="res/values-es/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-pl/web_permission_strings.xml" target="res/values-pl/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-th/web_permission_strings.xml" target="res/values-th/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-tr/web_permission_strings.xml" target="res/values-tr/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-uk/web_permission_strings.xml" target="res/values-uk/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-zh-rCN/web_permission_strings.xml" target="res/values-zh-rCN/web_permission_strings.xml" />
+        <resource-file src="src/android/res/values-zh-rTW/web_permission_strings.xml" target="res/values-zh-rTW/web_permission_strings.xml" />
 
     </platform>
 
