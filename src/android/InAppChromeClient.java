@@ -157,19 +157,6 @@ public class InAppChromeClient extends WebChromeClient {
     }
 
     /**
-     * Instructs the client to show a prompt to ask the user to set the Geolocation
-     * permission state for the specified origin.
-     *
-     * @param origin
-     * @param callback
-     */
-    @Override
-    public void onGeolocationPermissionsShowPrompt(String origin, Callback callback) {
-        super.onGeolocationPermissionsShowPrompt(origin, callback);
-        callback.invoke(origin, true, false);
-    }
-
-    /**
      * Tell the client to display a prompt dialog to the user.
      * If the client returns true, WebView will assume that the client will
      * handle the prompt dialog and call the appropriate JsPromptResult method.
