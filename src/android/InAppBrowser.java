@@ -168,6 +168,7 @@ public class InAppBrowser extends CordovaPlugin {
     private OnBackPressedCallback onBackPressedCallback;
     private InAppBrowserDialog dialog;
     private WebView inAppWebView;
+    private InAppChromeClient inAppChromeClient;
     private TextView titleTextView;
     private TextView subtitleTextView;
     private ImageButton moreButton;
@@ -635,9 +636,8 @@ public class InAppBrowser extends CordovaPlugin {
                 // other than your app's UI thread, it can cause unexpected results."
                 // http://developer.android.com/guide/webapps/migrating.html#Threads
                 // Security fix: clear per-origin permission state on close
-                WebChromeClient chromeClient = childView.getWebChromeClient();
-                if (chromeClient instanceof InAppChromeClient) {
-                    ((InAppChromeClient) chromeClient).clearPermissionState();
+                if (inAppChromeClient != null) {
+                    inAppChromeClient.clearPermissionState();
                 }
 
                 childView.loadUrl("about:blank");
@@ -1085,7 +1085,7 @@ public class InAppBrowser extends CordovaPlugin {
                 inAppWebView.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
                 inAppWebView.setId(Integer.valueOf(6));
                 // File Chooser Implemented ChromeClient
-                inAppWebView.setWebChromeClient(new InAppChromeClient(thatWebView) {
+                inAppChromeClient = new InAppChromeClient(thatWebView) {
                     @Override
                     public void onReceivedTitle(WebView view, String title) {
                         super.onReceivedTitle(view, title);
@@ -1122,7 +1122,8 @@ public class InAppBrowser extends CordovaPlugin {
                         // auto-granted to all origins — bypassing per-origin isolation.
                         super.onPermissionRequest(request);
                     }
-                });
+                };
+                inAppWebView.setWebChromeClient(inAppChromeClient);
                 currentClient = new InAppBrowserClient(thatWebView, titleTextView, beforeload);
                 inAppWebView.setWebViewClient(currentClient);
                 WebSettings settings = inAppWebView.getSettings();
